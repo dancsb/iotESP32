@@ -1,25 +1,28 @@
-/**
- * A BLE client example that is rich in capabilities.
- * There is a lot new capabilities implemented.
- * author unknown
- * updated by chegewara
- */
-
 #include "BLEDevice.h"
-//#include "BLEScan.h"
+
+#define PIN_RED    32 // GIOP32
+#define PIN_GREEN  26 // GIOP26
+#define PIN_BLUE   25 // GIOP25
+
+static int rgb[3] = {0, 0, 0};
+static int hue = 0;
 
 // The remote service we wish to connect to.
-static BLEUUID serviceUUID("4fafc201-1fb5-459e-8fcc-aaaaaaaaaaaa");
+static BLEUUID     serviceUUID("57abe72e-fffc-11ed-be56-0242ac120002");
 // The characteristic of the remote service we are interested in.
-static BLEUUID    charUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");
+static BLEUUID commandCharUUID("82bebf9a-fffc-11ed-be56-0242ac120002");
+static BLEUUID     RGBCharUUID("1623ab5a-fffe-11ed-be56-0242ac120002");
 
 static boolean doConnect = true;
 static boolean connected = false;
 static boolean doScan = false;
-static BLERemoteCharacteristic* pRemoteCharacteristic;
+static BLERemoteCharacteristic* pCommandCharacteristic;
+static BLERemoteCharacteristic* pRGBCharacteristic;
 static BLEAdvertisedDevice* myDevice;
 
-static void notifyCallback(
+static int ledMode = 0; //0 - off, 1 - on, 2 - rainbow
+
+static void commandNotifyCallback(
   BLERemoteCharacteristic* pBLERemoteCharacteristic,
   uint8_t* pData,
   size_t length,
@@ -30,6 +33,32 @@ static void notifyCallback(
     Serial.println(length);
     Serial.print("data: ");
     Serial.write(pData, length);
+    String mode((char*)pData, length);
+    if (mode == "off") {
+      ledMode = 0;
+    } else if (mode == "on") {
+      ledMode = 1;
+    } else if (mode == "rainbow") {
+      ledMode = 2;
+    }
+    Serial.println();
+}
+
+static void RGBNotifyCallback(
+  BLERemoteCharacteristic* pBLERemoteCharacteristic,
+  uint8_t* pData,
+  size_t length,
+  bool isNotify) {
+    Serial.print("Notify callback for characteristic ");
+    Serial.print(pBLERemoteCharacteristic->getUUID().toString().c_str());
+    Serial.print(" of data length ");
+    Serial.println(length);
+    Serial.print("data: ");
+    Serial.write(pData, length);
+    String color((char*)pData, length);
+    rgb[0] = color.substring(0, color.indexOf(' ')).toInt();
+    rgb[1] = color.substring(color.indexOf(' ') + 1, color.indexOf(' ', color.indexOf(' ') + 1)).toInt();
+    rgb[2] = color.substring(color.indexOf(' ', color.indexOf(' ') + 1) + 1, color.length() - 1).toInt();
     Serial.println();
 }
 
@@ -71,24 +100,29 @@ bool connectToServer() {
 
 
     // Obtain a reference to the characteristic in the service of the remote BLE server.
-    pRemoteCharacteristic = pRemoteService->getCharacteristic(charUUID);
-    if (pRemoteCharacteristic == nullptr) {
-      Serial.print("Failed to find our characteristic UUID: ");
-      Serial.println(charUUID.toString().c_str());
+    pCommandCharacteristic = pRemoteService->getCharacteristic(commandCharUUID);
+    if (pCommandCharacteristic == nullptr) {
+      Serial.print("Failed to find command characteristic UUID: ");
+      Serial.println(commandCharUUID.toString().c_str());
       pClient->disconnect();
       return false;
     }
-    Serial.println(" - Found our characteristic");
+    Serial.println(" - Found command characteristic");
 
-    // Read the value of the characteristic.
-    if(pRemoteCharacteristic->canRead()) {
-      std::string value = pRemoteCharacteristic->readValue();
-      Serial.print("The characteristic value was: ");
-      Serial.println(value.c_str());
+    pRGBCharacteristic = pRemoteService->getCharacteristic(RGBCharUUID);
+    if (pRGBCharacteristic == nullptr) {
+      Serial.print("Failed to find RGB characteristic UUID: ");
+      Serial.println(RGBCharUUID.toString().c_str());
+      pClient->disconnect();
+      return false;
     }
+    Serial.println(" - Found RGB characteristic");
 
-    if(pRemoteCharacteristic->canNotify())
-      pRemoteCharacteristic->registerForNotify(notifyCallback);
+    if(pCommandCharacteristic->canNotify())
+      pCommandCharacteristic->registerForNotify(commandNotifyCallback);
+
+    if(pRGBCharacteristic->canNotify())
+      pRGBCharacteristic->registerForNotify(RGBNotifyCallback);
 
     connected = true;
     return true;
@@ -116,10 +150,70 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
   } // onResult
 }; // MyAdvertisedDeviceCallbacks
 
+void HSVtoRGB (double hsv[], byte rgb[]) {
+  double h = hsv[0];
+  double s = hsv[1]/100.0;
+  double v = hsv[2]/100.0;
+  double c = v*s;
+  double tmp = h/60.0;
+  double tmp2 = tmp-2*floor(tmp/2);
+  double x = c*(1-abs(tmp2-1));
+  double m = v-c;
+  double r,g,b;
+  int i = floor(tmp);
+
+  switch (i) {
+    case 0:
+      r = c;
+      g = x;
+      b = 0;
+      break;
+    case 1:
+      r = x;
+      g = c;
+      b = 0;
+      break;
+    case 2: 
+      r = 0;
+      g = c;
+      b = x;
+      break;
+    case 3:
+      r = 0;
+      g = x;
+      b = c;
+      break;
+    case 4:
+      r = x;
+      g = 0;
+      b = c;
+      break;
+    case 5:
+      r = c;
+      g = 0;
+      b = x;
+      break;
+  }
+  rgb[0] = constrain((int)255*(r+m),0,255);
+  rgb[1] = constrain((int)255*(g+m),0,255);
+  rgb[2] = constrain((int)255*(b+m),0,255);
+}
+
+void setColor(int R, int G, int B) {
+  analogWrite(PIN_RED, R);
+  analogWrite(PIN_GREEN, G);
+  analogWrite(PIN_BLUE, B);
+}
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(PIN_RED, OUTPUT);
+  pinMode(PIN_GREEN, OUTPUT);
+  pinMode(PIN_BLUE, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(PIN_RED, LOW);
+  digitalWrite(PIN_GREEN, LOW);
+  digitalWrite(PIN_BLUE, LOW);
   Serial.begin(115200);
   Serial.println("Starting Arduino BLE Client application...");
   BLEDevice::init("");
@@ -162,6 +256,24 @@ void loop() {
   }else if(doScan){
     BLEDevice::getScan()->start(0);  // this is just example to start scan after disconnect, most likely there is better way to do it in arduino
   }
-  
-  delay(1000); // Delay a second between loops.
+  /*setColor(255, 0, 0);
+  delay(1000);
+  setColor(0, 255, 0);
+  delay(1000);
+  setColor(0, 0, 255);
+  delay(1000); // Delay a second between loops.*/
+  if(ledMode == 0)
+    setColor(0, 0, 0);
+  else if(ledMode == 1)
+    setColor(rgb[0], rgb[1], rgb[2]);
+  else if(ledMode == 2) {
+    byte _rgb[3];
+    double hsv[3] = {hue, 100, 100};
+    HSVtoRGB(hsv, _rgb);
+    setColor(_rgb[0], _rgb[1], _rgb[2]);
+    hue++;
+    if (hue == 360)
+      hue = 0;
+  }
+  delay(10);
 } // End of loop

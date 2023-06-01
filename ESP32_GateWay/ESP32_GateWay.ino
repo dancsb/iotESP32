@@ -1,20 +1,13 @@
-/*
-    Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleServer.cpp
-    Ported to Arduino ESP32 by Evandro Copercini
-    updates by chegewara
-*/
-
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
 
-// See the following for generating UUIDs:
-// https://www.uuidgenerator.net/
+static BLEUUID     serviceUUID("57abe72e-fffc-11ed-be56-0242ac120002");
+static BLEUUID commandCharUUID("82bebf9a-fffc-11ed-be56-0242ac120002");
+static BLEUUID     RGBCharUUID("1623ab5a-fffe-11ed-be56-0242ac120002");
 
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-aaaaaaaaaaaa"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-
-BLECharacteristic *pCharacteristic;
+BLECharacteristic *pCommandCharacteristic;
+BLECharacteristic *pRGBCharacteristic;
 
 class MyServerCallback : public BLEServerCallbacks {
 void onConnect(BLEServer* pServer) {
@@ -38,17 +31,23 @@ void setup() {
   BLEDevice::init("ESP32 - GateWay");
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallback());
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-  pCharacteristic = pService->createCharacteristic(
-                                         CHARACTERISTIC_UUID,
+  BLEService *pService = pServer->createService(serviceUUID);
+  pCommandCharacteristic = pService->createCharacteristic(
+                                         commandCharUUID,
                                          BLECharacteristic::PROPERTY_NOTIFY
                                        );
 
-  pCharacteristic->setValue("led: off");
+  pRGBCharacteristic = pService->createCharacteristic(
+                                         RGBCharUUID,
+                                         BLECharacteristic::PROPERTY_NOTIFY
+                                       );
+
+  pCommandCharacteristic->setValue("off");
+  pRGBCharacteristic->setValue("0 0 0");
   pService->start();
   // BLEAdvertising *pAdvertising = pServer->getAdvertising();  // this still is working for backward compatibility
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->addServiceUUID(serviceUUID);
   pAdvertising->setScanResponse(true);
   pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
   pAdvertising->setMinPreferred(0x12);
@@ -58,10 +57,18 @@ void setup() {
 
 void loop() {
   if (Serial.available()) {
-    String msg = Serial.readString();
-    Serial.print(msg);
-    std::string xd = msg.c_str();
-    pCharacteristic->setValue(xd);
-    pCharacteristic->notify(); 
+    String input = Serial.readString();
+    String words[2];
+    words[0] = input.substring(0, input.indexOf(' '));
+    words[1] = input.substring(input.indexOf(' ') + 1, input.length() - 1);
+    if(words[0] == "led") {
+      std::string mode = words[1].c_str();
+      pCommandCharacteristic->setValue(mode);
+      pCommandCharacteristic->notify(); 
+    } else if(words[0] == "rgb") {
+      std::string rgb = words[1].c_str();
+      pRGBCharacteristic->setValue(rgb);
+      pRGBCharacteristic->notify(); 
+    }
   }
 }
