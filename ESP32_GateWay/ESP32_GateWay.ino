@@ -4,16 +4,24 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 
-static BLEUUID serviceUUID("57abe72e-fffc-11ed-be56-0242ac120002");
-static BLEUUID commandCharUUID("82bebf9a-fffc-11ed-be56-0242ac120002");
-static BLEUUID RGBCharUUID("1623ab5a-fffe-11ed-be56-0242ac120002");
+// BLE sevice we advertise
+const BLEUUID serviceUUID("57abe72e-fffc-11ed-be56-0242ac120002");
+const BLEUUID commandCharUUID("82bebf9a-fffc-11ed-be56-0242ac120002");
+const BLEUUID RGBCharUUID("1623ab5a-fffe-11ed-be56-0242ac120002");
+BLECharacteristic* pCommandCharacteristic;
+BLECharacteristic* pRGBCharacteristic;
 
+// WIFI we connect to
 const char* WiFissid = "iotESP32";
 const char* WiFipassword = "blewifimqtt";
+WiFiClientSecure espClient;
+
+// MQTT we subscribe to
 const char* mqttServer = "ob6e5f6f.ala.us-east-1.emqxsl.com";
 const char* mqttUserName = "ESP32_GateWay";
 const char* mqttPwd = "a8a2F2tDEJL6fPd";
 const char* clientID = "ESP32_GateWay";
+PubSubClient client(espClient);
 
 // load DigiCert Global Root CA ca_cert
 const char* ca_cert =
@@ -40,11 +48,6 @@ const char* ca_cert =
   "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4="
   "-----END CERTIFICATE-----\n";
 
-WiFiClientSecure espClient;
-PubSubClient client(espClient);
-
-BLECharacteristic* pCommandCharacteristic;
-BLECharacteristic* pRGBCharacteristic;
 
 void setup_wifi() {
   delay(10);
@@ -62,6 +65,7 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
+//continously try to reconnect to wifi
 void reconnect() {
   while (!client.connected()) {
     if (client.connect(clientID, mqttUserName, mqttPwd)) {
@@ -73,7 +77,7 @@ void reconnect() {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
-      delay(5000);  // wait 5sec and retry
+      delay(5000);
     }
   }
 }
@@ -100,6 +104,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+void setup_mqtt(){
+  espClient.setCACert(ca_cert);
+  client.setServer(mqttServer, 8883);
+  client.setCallback(callback);
+}
+//class that handles the BLE connect and disconnect actions
 class MyServerCallback : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     Serial.println("Client connected!");
@@ -113,27 +123,20 @@ class MyServerCallback : public BLEServerCallbacks {
   }
 };
 
-void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-  Serial.begin(115200);
-  Serial.println("Starting WiFi work!");
-  setup_wifi();
-  Serial.println("Starting BLE work!");
-  espClient.setCACert(ca_cert);
-  client.setServer(mqttServer, 8883);  //setting MQTT server
-  client.setCallback(callback);        //defining function which will be called when message is recieved.
+void setup_ble(){
   BLEDevice::init("ESP32 - GateWay");
   BLEServer* pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallback());
   BLEService* pService = pServer->createService(serviceUUID);
   pCommandCharacteristic = pService->createCharacteristic(
     commandCharUUID,
-    BLECharacteristic::PROPERTY_NOTIFY);
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
 
   pRGBCharacteristic = pService->createCharacteristic(
     RGBCharUUID,
-    BLECharacteristic::PROPERTY_NOTIFY);
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
 
   pCommandCharacteristic->setValue("off");
   pRGBCharacteristic->setValue("0 0 0");
@@ -141,10 +144,27 @@ void setup() {
   BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(serviceUUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
+  pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
-  Serial.println("Characteristic defined! Now you can read it in your phone!");
+  Serial.println("Characteristic defined!");
+}
+
+void setup() {
+  //LED states if the 2 devices are connected through BLE or not
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+
+  Serial.begin(115200);
+
+  Serial.println("Starting WiFi work!");
+  setup_wifi();
+
+  Serial.println("Starting MQTT work!");
+  setup_mqtt();
+ 
+  Serial.println("Starting BLE work!");
+  setup_ble();
 }
 
 void loop() {

@@ -4,24 +4,27 @@
 #define PIN_GREEN 26  // GIOP26
 #define PIN_BLUE 25   // GIOP25
 
-static int rgb[3] = { 0, 0, 0 };
+static int rgb[3] = { 128, 128, 128 };
 static int hue = 0;
 
-// The remote service we wish to connect to.
+// BLE service we connect to
 static BLEUUID serviceUUID("57abe72e-fffc-11ed-be56-0242ac120002");
-// The characteristic of the remote service we are interested in.
 static BLEUUID commandCharUUID("82bebf9a-fffc-11ed-be56-0242ac120002");
 static BLEUUID RGBCharUUID("1623ab5a-fffe-11ed-be56-0242ac120002");
+//2 caractereistics, one sets the modes, one the color of the "on" mode
+static BLERemoteCharacteristic* pCommandCharacteristic;
+static BLERemoteCharacteristic* pRGBCharacteristic;
+//our BLE device
+static BLEAdvertisedDevice* myDevice;
 
 static boolean doConnect = true;
 static boolean connected = false;
 static boolean doScan = false;
-static BLERemoteCharacteristic* pCommandCharacteristic;
-static BLERemoteCharacteristic* pRGBCharacteristic;
-static BLEAdvertisedDevice* myDevice;
 
-static int ledMode = 0;  //0 - off, 1 - on, 2 - rainbow
+//0 - off, 1 - on, 2 - rainbow
+static int ledMode = 0;
 
+//in the command caracteristics we get the mode
 static void commandNotifyCallback(
   BLERemoteCharacteristic* pBLERemoteCharacteristic,
   uint8_t* pData,
@@ -44,6 +47,7 @@ static void commandNotifyCallback(
   Serial.println();
 }
 
+//in the rgb caracteristic we get the color for the on mode
 static void RGBNotifyCallback(
   BLERemoteCharacteristic* pBLERemoteCharacteristic,
   uint8_t* pData,
@@ -56,12 +60,13 @@ static void RGBNotifyCallback(
   Serial.print("data: ");
   Serial.write(pData, length);
   String color((char*)pData, length);
+  //the colors are separated by spaces
   rgb[0] = color.substring(0, color.indexOf(' ')).toInt();
   rgb[1] = color.substring(color.indexOf(' ') + 1, color.indexOf(' ', color.indexOf(' ') + 1)).toInt();
   rgb[2] = color.substring(color.indexOf(' ', color.indexOf(' ') + 1) + 1, color.length() - 1).toInt();
   Serial.println();
 }
-
+//class that handles the BLE connect and disconnect actions
 class MyClientCallback : public BLEClientCallbacks {
   void onConnect(BLEClient* pclient) {
     digitalWrite(LED_BUILTIN, HIGH);
@@ -150,7 +155,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   }    // onResult
 };     // MyAdvertisedDeviceCallbacks
 
-void HSVtoRGB(double hsv[], byte rgb[]) {
+void HSVtoRGB(double hsv[], byte _rgb[]) {
   double h = hsv[0];
   double s = hsv[1] / 100.0;
   double v = hsv[2] / 100.0;
@@ -194,9 +199,9 @@ void HSVtoRGB(double hsv[], byte rgb[]) {
       b = x;
       break;
   }
-  rgb[0] = constrain((int)255 * (r + m), 0, 255);
-  rgb[1] = constrain((int)255 * (g + m), 0, 255);
-  rgb[2] = constrain((int)255 * (b + m), 0, 255);
+  _rgb[0] = constrain((int)255 * (r + m), 0, 255);
+  _rgb[1] = constrain((int)255 * (g + m), 0, 255);
+  _rgb[2] = constrain((int)255 * (b + m), 0, 255);
 }
 
 void setColor(int R, int G, int B) {
@@ -247,21 +252,9 @@ void loop() {
 
   // If we are connected to a peer BLE Server, update the characteristic each time we are reached
   // with the current time since boot.
-  if (connected) {
-    /*String newValue = "Time since boot: " + String(millis()/1000);
-    Serial.println("Setting new characteristic value to \"" + newValue + "\"");
-    
-    // Set the characteristic's value to be the array of bytes that is actually a string.
-    pRemoteCharacteristic->writeValue(newValue.c_str(), newValue.length());*/
-  } else if (doScan) {
+  if (!connected && doScan) {
     BLEDevice::getScan()->start(0);  // this is just example to start scan after disconnect, most likely there is better way to do it in arduino
   }
-  /*setColor(255, 0, 0);
-  delay(1000);
-  setColor(0, 255, 0);
-  delay(1000);
-  setColor(0, 0, 255);
-  delay(1000); // Delay a second between loops.*/
   if (ledMode == 0)
     setColor(0, 0, 0);
   else if (ledMode == 1)
