@@ -1,17 +1,17 @@
 #include "BLEDevice.h"
 
-#define PIN_RED    32 // GIOP32
-#define PIN_GREEN  26 // GIOP26
-#define PIN_BLUE   25 // GIOP25
+#define PIN_RED 32    // GIOP32
+#define PIN_GREEN 26  // GIOP26
+#define PIN_BLUE 25   // GIOP25
 
-static int rgb[3] = {0, 0, 0};
+static int rgb[3] = { 0, 0, 0 };
 static int hue = 0;
 
 // The remote service we wish to connect to.
-static BLEUUID     serviceUUID("57abe72e-fffc-11ed-be56-0242ac120002");
+static BLEUUID serviceUUID("57abe72e-fffc-11ed-be56-0242ac120002");
 // The characteristic of the remote service we are interested in.
 static BLEUUID commandCharUUID("82bebf9a-fffc-11ed-be56-0242ac120002");
-static BLEUUID     RGBCharUUID("1623ab5a-fffe-11ed-be56-0242ac120002");
+static BLEUUID RGBCharUUID("1623ab5a-fffe-11ed-be56-0242ac120002");
 
 static boolean doConnect = true;
 static boolean connected = false;
@@ -20,28 +20,28 @@ static BLERemoteCharacteristic* pCommandCharacteristic;
 static BLERemoteCharacteristic* pRGBCharacteristic;
 static BLEAdvertisedDevice* myDevice;
 
-static int ledMode = 0; //0 - off, 1 - on, 2 - rainbow
+static int ledMode = 0;  //0 - off, 1 - on, 2 - rainbow
 
 static void commandNotifyCallback(
   BLERemoteCharacteristic* pBLERemoteCharacteristic,
   uint8_t* pData,
   size_t length,
   bool isNotify) {
-    Serial.print("Notify callback for characteristic ");
-    Serial.print(pBLERemoteCharacteristic->getUUID().toString().c_str());
-    Serial.print(" of data length ");
-    Serial.println(length);
-    Serial.print("data: ");
-    Serial.write(pData, length);
-    String mode((char*)pData, length);
-    if (mode == "off") {
-      ledMode = 0;
-    } else if (mode == "on") {
-      ledMode = 1;
-    } else if (mode == "rainbow") {
-      ledMode = 2;
-    }
-    Serial.println();
+  Serial.print("Notify callback for characteristic ");
+  Serial.print(pBLERemoteCharacteristic->getUUID().toString().c_str());
+  Serial.print(" of data length ");
+  Serial.println(length);
+  Serial.print("data: ");
+  Serial.write(pData, length);
+  String mode((char*)pData, length);
+  if (mode == "off") {
+    ledMode = 0;
+  } else if (mode == "on") {
+    ledMode = 1;
+  } else if (mode == "rainbow") {
+    ledMode = 2;
+  }
+  Serial.println();
 }
 
 static void RGBNotifyCallback(
@@ -49,17 +49,17 @@ static void RGBNotifyCallback(
   uint8_t* pData,
   size_t length,
   bool isNotify) {
-    Serial.print("Notify callback for characteristic ");
-    Serial.print(pBLERemoteCharacteristic->getUUID().toString().c_str());
-    Serial.print(" of data length ");
-    Serial.println(length);
-    Serial.print("data: ");
-    Serial.write(pData, length);
-    String color((char*)pData, length);
-    rgb[0] = color.substring(0, color.indexOf(' ')).toInt();
-    rgb[1] = color.substring(color.indexOf(' ') + 1, color.indexOf(' ', color.indexOf(' ') + 1)).toInt();
-    rgb[2] = color.substring(color.indexOf(' ', color.indexOf(' ') + 1) + 1, color.length() - 1).toInt();
-    Serial.println();
+  Serial.print("Notify callback for characteristic ");
+  Serial.print(pBLERemoteCharacteristic->getUUID().toString().c_str());
+  Serial.print(" of data length ");
+  Serial.println(length);
+  Serial.print("data: ");
+  Serial.write(pData, length);
+  String color((char*)pData, length);
+  rgb[0] = color.substring(0, color.indexOf(' ')).toInt();
+  rgb[1] = color.substring(color.indexOf(' ') + 1, color.indexOf(' ', color.indexOf(' ') + 1)).toInt();
+  rgb[2] = color.substring(color.indexOf(' ', color.indexOf(' ') + 1) + 1, color.length() - 1).toInt();
+  Serial.println();
 }
 
 class MyClientCallback : public BLEClientCallbacks {
@@ -75,63 +75,63 @@ class MyClientCallback : public BLEClientCallbacks {
 };
 
 bool connectToServer() {
-    Serial.print("Forming a connection to ");
-    Serial.println(myDevice->getAddress().toString().c_str());
-    
-    BLEClient*  pClient  = BLEDevice::createClient();
-    Serial.println(" - Created client");
+  Serial.print("Forming a connection to ");
+  Serial.println(myDevice->getAddress().toString().c_str());
 
-    pClient->setClientCallbacks(new MyClientCallback());
+  BLEClient* pClient = BLEDevice::createClient();
+  Serial.println(" - Created client");
 
-    // Connect to the remove BLE Server.
-    pClient->connect(myDevice);  // if you pass BLEAdvertisedDevice instead of address, it will be recognized type of peer device address (public or private)
-    Serial.println(" - Connected to server");
-    pClient->setMTU(517); //set client to request maximum MTU from server (default is 23 otherwise)
-  
-    // Obtain a reference to the service we are after in the remote BLE server.
-    BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
-    if (pRemoteService == nullptr) {
-      Serial.print("Failed to find our service UUID: ");
-      Serial.println(serviceUUID.toString().c_str());
-      pClient->disconnect();
-      return false;
-    }
-    Serial.println(" - Found our service");
+  pClient->setClientCallbacks(new MyClientCallback());
+
+  // Connect to the remove BLE Server.
+  pClient->connect(myDevice);  // if you pass BLEAdvertisedDevice instead of address, it will be recognized type of peer device address (public or private)
+  Serial.println(" - Connected to server");
+  pClient->setMTU(517);  //set client to request maximum MTU from server (default is 23 otherwise)
+
+  // Obtain a reference to the service we are after in the remote BLE server.
+  BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
+  if (pRemoteService == nullptr) {
+    Serial.print("Failed to find our service UUID: ");
+    Serial.println(serviceUUID.toString().c_str());
+    pClient->disconnect();
+    return false;
+  }
+  Serial.println(" - Found our service");
 
 
-    // Obtain a reference to the characteristic in the service of the remote BLE server.
-    pCommandCharacteristic = pRemoteService->getCharacteristic(commandCharUUID);
-    if (pCommandCharacteristic == nullptr) {
-      Serial.print("Failed to find command characteristic UUID: ");
-      Serial.println(commandCharUUID.toString().c_str());
-      pClient->disconnect();
-      return false;
-    }
-    Serial.println(" - Found command characteristic");
+  // Obtain a reference to the characteristic in the service of the remote BLE server.
+  pCommandCharacteristic = pRemoteService->getCharacteristic(commandCharUUID);
+  if (pCommandCharacteristic == nullptr) {
+    Serial.print("Failed to find command characteristic UUID: ");
+    Serial.println(commandCharUUID.toString().c_str());
+    pClient->disconnect();
+    return false;
+  }
+  Serial.println(" - Found command characteristic");
 
-    pRGBCharacteristic = pRemoteService->getCharacteristic(RGBCharUUID);
-    if (pRGBCharacteristic == nullptr) {
-      Serial.print("Failed to find RGB characteristic UUID: ");
-      Serial.println(RGBCharUUID.toString().c_str());
-      pClient->disconnect();
-      return false;
-    }
-    Serial.println(" - Found RGB characteristic");
+  pRGBCharacteristic = pRemoteService->getCharacteristic(RGBCharUUID);
+  if (pRGBCharacteristic == nullptr) {
+    Serial.print("Failed to find RGB characteristic UUID: ");
+    Serial.println(RGBCharUUID.toString().c_str());
+    pClient->disconnect();
+    return false;
+  }
+  Serial.println(" - Found RGB characteristic");
 
-    if(pCommandCharacteristic->canNotify())
-      pCommandCharacteristic->registerForNotify(commandNotifyCallback);
+  if (pCommandCharacteristic->canNotify())
+    pCommandCharacteristic->registerForNotify(commandNotifyCallback);
 
-    if(pRGBCharacteristic->canNotify())
-      pRGBCharacteristic->registerForNotify(RGBNotifyCallback);
+  if (pRGBCharacteristic->canNotify())
+    pRGBCharacteristic->registerForNotify(RGBNotifyCallback);
 
-    connected = true;
-    return true;
+  connected = true;
+  return true;
 }
 /**
  * Scan for BLE servers and find the first one that advertises the service we are looking for.
  */
-class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
- /**
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+  /**
    * Called for each advertising BLE server.
    */
   void onResult(BLEAdvertisedDevice advertisedDevice) {
@@ -146,20 +146,20 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
       doConnect = true;
       doScan = true;
 
-    } // Found our server
-  } // onResult
-}; // MyAdvertisedDeviceCallbacks
+    }  // Found our server
+  }    // onResult
+};     // MyAdvertisedDeviceCallbacks
 
-void HSVtoRGB (double hsv[], byte rgb[]) {
+void HSVtoRGB(double hsv[], byte rgb[]) {
   double h = hsv[0];
-  double s = hsv[1]/100.0;
-  double v = hsv[2]/100.0;
-  double c = v*s;
-  double tmp = h/60.0;
-  double tmp2 = tmp-2*floor(tmp/2);
-  double x = c*(1-abs(tmp2-1));
-  double m = v-c;
-  double r,g,b;
+  double s = hsv[1] / 100.0;
+  double v = hsv[2] / 100.0;
+  double c = v * s;
+  double tmp = h / 60.0;
+  double tmp2 = tmp - 2 * floor(tmp / 2);
+  double x = c * (1 - abs(tmp2 - 1));
+  double m = v - c;
+  double r, g, b;
   int i = floor(tmp);
 
   switch (i) {
@@ -173,7 +173,7 @@ void HSVtoRGB (double hsv[], byte rgb[]) {
       g = c;
       b = 0;
       break;
-    case 2: 
+    case 2:
       r = 0;
       g = c;
       b = x;
@@ -194,9 +194,9 @@ void HSVtoRGB (double hsv[], byte rgb[]) {
       b = x;
       break;
   }
-  rgb[0] = constrain((int)255*(r+m),0,255);
-  rgb[1] = constrain((int)255*(g+m),0,255);
-  rgb[2] = constrain((int)255*(b+m),0,255);
+  rgb[0] = constrain((int)255 * (r + m), 0, 255);
+  rgb[1] = constrain((int)255 * (g + m), 0, 255);
+  rgb[2] = constrain((int)255 * (b + m), 0, 255);
 }
 
 void setColor(int R, int G, int B) {
@@ -227,14 +227,14 @@ void setup() {
   pBLEScan->setWindow(449);
   pBLEScan->setActiveScan(true);
   pBLEScan->start(5, false);
-} // End of setup.
+}  // End of setup.
 
 
 // This is the Arduino main loop function.
 void loop() {
 
   // If the flag "doConnect" is true then we have scanned for and found the desired
-  // BLE Server with which we wish to connect.  Now we connect to it.  Once we are 
+  // BLE Server with which we wish to connect.  Now we connect to it.  Once we are
   // connected we set the connected flag to be true.
   if (doConnect == true) {
     if (connectToServer()) {
@@ -253,7 +253,7 @@ void loop() {
     
     // Set the characteristic's value to be the array of bytes that is actually a string.
     pRemoteCharacteristic->writeValue(newValue.c_str(), newValue.length());*/
-  }else if(doScan){
+  } else if (doScan) {
     BLEDevice::getScan()->start(0);  // this is just example to start scan after disconnect, most likely there is better way to do it in arduino
   }
   /*setColor(255, 0, 0);
@@ -262,13 +262,13 @@ void loop() {
   delay(1000);
   setColor(0, 0, 255);
   delay(1000); // Delay a second between loops.*/
-  if(ledMode == 0)
+  if (ledMode == 0)
     setColor(0, 0, 0);
-  else if(ledMode == 1)
+  else if (ledMode == 1)
     setColor(rgb[0], rgb[1], rgb[2]);
-  else if(ledMode == 2) {
+  else if (ledMode == 2) {
     byte _rgb[3];
-    double hsv[3] = {hue, 100, 100};
+    double hsv[3] = { hue, 100, 100 };
     HSVtoRGB(hsv, _rgb);
     setColor(_rgb[0], _rgb[1], _rgb[2]);
     hue++;
@@ -276,4 +276,4 @@ void loop() {
       hue = 0;
   }
   delay(10);
-} // End of loop
+}  // End of loop
